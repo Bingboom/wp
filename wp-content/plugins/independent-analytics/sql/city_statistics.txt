@@ -1,0 +1,55 @@
+SELECT
+    *
+FROM (
+         SELECT
+             visitors.country_code,
+             visitors.city,
+             visitors.subdivision,
+             visitors.country,
+             visitors.continent,
+             GROUP_CONCAT(DISTINCT sessions.visitor_id) AS visitor_ids,
+             SUM( IF(sessions.created_at BETWEEN :start AND :end, views.views, NULL)) AS views,
+             COUNT(DISTINCT IF(sessions.created_at BETWEEN :start AND :end, sessions.visitor_id, NULL)) AS visitors,
+             COUNT(DISTINCT IF(sessions.created_at BETWEEN :start AND :end, sessions.session_id, NULL)) AS sessions,
+             AVG( IF(sessions.created_at BETWEEN :start AND :end, TIMESTAMPDIFF(SECOND, sessions.created_at, sessions.ended_at), NULL)) AS average_session_duration,
+             SUM( IF(sessions.created_at BETWEEN :prev_start AND :prev_end, views.views, NULL)) AS prev_period_views,
+             COUNT(DISTINCT IF(sessions.created_at BETWEEN :prev_start AND :prev_end, sessions.visitor_id, NULL)) AS prev_period_visitors,
+             COUNT(DISTINCT IF(sessions.created_at BETWEEN :prev_start AND :prev_end, sessions.session_id, NULL)) AS previous_period_sessions,
+             AVG( IF(sessions.created_at BETWEEN :prev_start AND :prev_end, TIMESTAMPDIFF(SECOND, sessions.created_at, sessions.ended_at), NULL)) AS prev_period_average_session_duration,
+             SUM( IF(sessions.created_at BETWEEN :start AND :end, views.orders, NULL)) AS wc_orders,
+             SUM( IF(sessions.created_at BETWEEN :start AND :end, views.gross_sales, NULL)) AS wc_gross_sales,
+             SUM( IF(sessions.created_at BETWEEN :start AND :end, views.total_refunds, NULL)) AS wc_refunds,
+             SUM( IF(sessions.created_at BETWEEN :start AND :end, views.total_refunded, NULL)) AS wc_refunded_amount
+         FROM
+             wp_independent_analytics_sessions AS sessions
+                 JOIN wp_independent_analytics_visitors AS visitors ON sessions.visitor_id = visitors.visitor_id
+                 JOIN (
+                 SELECT
+                     sessions.session_id,
+                     COUNT(DISTINCT views.id) AS views,
+                     COUNT(DISTINCT wc_orders.order_id) AS orders,
+                     IFNULL(SUM(wc_orders.total), 0) AS gross_sales,
+                     IFNULL(SUM(wc_orders.total_refunded), 0) AS total_refunded,
+                     IFNULL(SUM(wc_orders.total_refunds), 0) AS total_refunds
+                 FROM
+                     wp_independent_analytics_sessions AS sessions
+                         JOIN wp_independent_analytics_views AS views ON sessions.session_id = views.session_id
+                         LEFT JOIN wp_independent_analytics_wc_orders AS wc_orders ON views.id = wc_orders.view_id AND wc_orders.status IN('wc-completed', 'completed', 'wc-processing', 'processing', 'wc-refunded', 'refunded')
+                 WHERE
+                     sessions.created_at BETWEEN :prev_start AND :end AND views.viewed_at BETWEEN :prev_start AND :end
+                 GROUP BY
+                     sessions.session_id) AS views ON sessions.session_id = views.session_id
+         WHERE
+             country_code IS NOT NULL AND sessions.created_at BETWEEN :prev_start AND :end
+         GROUP BY
+             continent,
+             country,
+             country_code,
+             subdivision,
+             city
+         ORDER BY
+             visitors DESC,
+             views DESC,
+             city) subquery
+WHERE
+        views > 0

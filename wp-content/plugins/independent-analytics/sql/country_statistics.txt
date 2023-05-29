@@ -1,0 +1,37 @@
+SELECT *
+FROM (SELECT visitors.country_code,
+             visitors.country,
+             visitors.continent,
+             COUNT(CASE WHEN views.viewed_at BETWEEN :start AND :end THEN 1 END) AS views,
+             COUNT(DISTINCT (CASE
+                                 WHEN views.viewed_at BETWEEN :start AND :end
+                                     THEN sessions.visitor_id END))              AS visitors,
+             COUNT(DISTINCT (CASE
+                                 WHEN views.viewed_at BETWEEN :start AND :end
+                                     THEN sessions.session_id END))              AS sessions,
+             COUNT(CASE
+                       WHEN views.viewed_at BETWEEN :prev_start AND :prev_end
+                           THEN 1 END)                                           AS prev_period_views,
+             COUNT(DISTINCT (CASE
+                                 WHEN views.viewed_at BETWEEN :prev_start AND :prev_end
+                                     THEN sessions.visitor_id END))              AS prev_period_visitors,
+             AVG(TIMESTAMPDIFF(SECOND, sessions.created_at, sessions.ended_at))      AS average_session_duration,
+             ''                                                                  as visitor_ids,
+             0                                                                   AS wc_orders,
+             0                                                                   AS wc_gross_sales,
+             0                                                                   AS wc_refunds,
+             0                                                                   AS wc_refunded_amount
+      FROM wp_independent_analytics_views AS views
+               LEFT JOIN wp_independent_analytics_sessions AS sessions
+                         on views.session_id = sessions.session_id
+               LEFT JOIN wp_independent_analytics_visitors AS visitors
+                         ON sessions.visitor_id = visitors.visitor_id
+      WHERE country_code IS NOT NULL
+        AND viewed_at BETWEEN :prev_start AND :end
+      GROUP BY continent,
+               country,
+               country_code
+      ORDER BY visitors DESC,
+               views DESC,
+               country) subquery
+WHERE views > 0

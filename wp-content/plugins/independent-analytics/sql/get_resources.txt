@@ -1,0 +1,44 @@
+SELECT *
+FROM ( SELECT COUNT(DISTINCT IF(views.current_period, views.id, NULL))               AS views,
+              COUNT(DISTINCT IF(views.current_period, sessions.visitor_id, NULL))    AS visitors,
+              COUNT(DISTINCT IF(views.current_period, sessions.session_id, NULL))    AS sessions,
+              COUNT(DISTINCT IF(comments.current_period, comments.comment_id, NULL)) AS comments,
+              AVG( IF(views.current_period, TIMESTAMPDIFF(SECOND, views.viewed_at, views.next_viewed_at), NULL)) AS average_view_duration,
+              COUNT(DISTINCT
+                    IF(views.previous_period, views.id, NULL))                       AS prev_period_views,
+              COUNT(DISTINCT
+                    IF(views.previous_period, sessions.visitor_id, NULL))            AS prev_period_visitors,
+              COUNT(DISTINCT
+                    IF(views.previous_period, sessions.session_id, NULL))            AS prev_period_sessions,
+              COUNT(DISTINCT
+                    IF(comments.previous_period, comments.comment_id, NULL))         AS prev_period_comments,
+              AVG( IF(views.previous_period, TIMESTAMPDIFF(SECOND, views.viewed_at, views.next_viewed_at), NULL)) AS prev_period_average_view_duration,
+              resources.*
+       FROM ( SELECT views.*,
+                     IF(views.viewed_at BETWEEN :start AND :end, TRUE, FALSE) AS current_period,
+                     IF(views.viewed_at BETWEEN :prev_start AND :prev_end, TRUE,
+                        FALSE)                                                AS previous_period
+              FROM wp_independent_analytics_views AS views
+              WHERE views.viewed_at BETWEEN :prev_start AND :end
+              ) AS views
+                LEFT JOIN wp_independent_analytics_sessions AS sessions
+                          ON views.session_id = sessions.session_id
+                LEFT JOIN wp_independent_analytics_resources AS resources
+                          ON views.resource_id = resources.id
+                LEFT JOIN ( SELECT comment_ID      AS comment_id,
+                                   comment_post_ID AS post_id,
+                                   IF(comments.comment_date_gmt BETWEEN :start AND :end, TRUE,
+                                      FALSE)       AS current_period,
+                                   IF(comments.comment_date_gmt BETWEEN :prev_start AND :prev_end,
+                                      TRUE,
+                                      FALSE)       AS previous_period
+                            FROM wp_comments AS comments
+                            WHERE comments.comment_approved = '1'
+                              AND comments.comment_date_gmt BETWEEN :prev_start AND :end
+                            ) AS comments
+                          ON resources.singular_id = comments.post_id
+       GROUP BY resources.id
+       ORDER BY visitors DESC,
+                views DESC
+       ) subquery
+WHERE views > 0

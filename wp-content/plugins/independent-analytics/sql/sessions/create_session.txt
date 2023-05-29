@@ -1,0 +1,3 @@
+INSERT INTO wp_independent_analytics_sessions
+(visitor_id, referrer_id, campaign_id, created_at)
+VALUES (:visitor_id, :referrer_id, :campaign_id, :created_at)

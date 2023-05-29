@@ -1,0 +1,8 @@
+INSERT INTO wp_independent_analytics_visitors
+(visitor_id, country_code, city, subdivision, country, continent)
+VALUES (:visitor_id, :country_code, :city, :subdivision, :country, :continent)
+ON DUPLICATE KEY UPDATE country_code = :country_code,
+                        city         = :city,
+                        subdivision  = :subdivision,
+                        country      = :country,
+                        continent    = :continent;
